@@ -89,8 +89,15 @@ All code in this repo is Maxime Baelde's own and released under
 [THIRD_PARTY.md](THIRD_PARTY.md) for the two files that were considered and
 dropped over unclear/incompatible license terms.
 
-## Roadmap
+## Companion package
 
-- **Next** (separate repo): a standalone `nongaussian-mixtures` package
-  factoring out the Dirichlet-mixture estimator used by RARE, published to
-  PyPI with a scikit-learn-compatible API.
+The mixture estimators this code relies on are maintained separately, with a
+scikit-learn-compatible API, in
+[**nongaussian-mixtures**](https://github.com/mbaelde/nongaussian-mixtures):
+`DirichletMixture` (EM + damped Newton), `BayesianDirichletMixture`
+(variational), `BetaMixture`, and `BinnedGaussianMixture` (the binned-data
+model of appendix B.1). All four pass `check_estimator`.
+
+`gasm.common.dirichlet_mixture` and `gasm.common.gmm_binned` are the
+thesis-faithful implementations kept here for reference; the package is the
+maintained version, and this repo will depend on it once it is on PyPI.
