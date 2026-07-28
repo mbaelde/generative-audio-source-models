@@ -62,7 +62,7 @@ matlab/
 
 python/                 # rewrite from the equations (see python/README.md)
 ├── src/gasm/
-│   ├── common/         # power spectra, multinomial kernel, Hellinger, Dirichlet mixture, binned GMM
+│   ├── common/         # power spectra, multinomial kernel, Hellinger
 │   ├── rare/           # classifier (mono + polyphonic), prototype reduction, dataset prep
 │   └── rase/           # dmgmm.py (DM-GMM), defmap.py (Def-MAP)
 ├── examples/           # ESC-50 classification, MUSDB18 separation
@@ -91,13 +91,14 @@ dropped over unclear/incompatible license terms.
 
 ## Companion package
 
-The mixture estimators this code relies on are maintained separately, with a
+The mixture models of the thesis' appendices are maintained separately, with a
 scikit-learn-compatible API, in
-[**nongaussian-mixtures**](https://github.com/mbaelde/nongaussian-mixtures):
-`DirichletMixture` (EM + damped Newton), `BayesianDirichletMixture`
-(variational), `BetaMixture`, and `BinnedGaussianMixture` (the binned-data
-model of appendix B.1). All four pass `check_estimator`.
+[**nongaussian-mixtures**](https://github.com/mbaelde/nongaussian-mixtures)
+([PyPI](https://pypi.org/project/nongaussian-mixtures/)):
+`DirichletMixture` (appendix B.2, EM + damped Newton),
+`BayesianDirichletMixture` (variational), `BetaMixture`, and
+`BinnedGaussianMixture` (appendix B.1, and diagonal covariances in place of the
+2-D numerical quadrature of `gmm2d_binned.m`). All four pass `check_estimator`.
 
-`gasm.common.dirichlet_mixture` and `gasm.common.gmm_binned` are the
-thesis-faithful implementations kept here for reference; the package is the
-maintained version, and this repo will depend on it once it is on PyPI.
+`python/` depends on it rather than carrying its own copies; the 2019 originals
+stay in `matlab/common/Statistics/`.
