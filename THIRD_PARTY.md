@@ -1,7 +1,18 @@
 # Third-party code
 
-This repo currently vendors no third-party code. Two files were staged here at
-various points and dropped after checking their actual license terms:
+## Vendored
+
+- `matlab/classification/demo/rare_program/jsonlab/` (Qianqian Fang, JSONLab):
+  BSD License per each file's header (`% license: BSD License, see
+  LICENSE_BSD.txt files for details`), compatible with this repo's
+  BSD-3-Clause. Used by the standalone demo (`test_RARE.m`) to
+  read/write its JSON config and results. Missed in the original
+  2026-07-27 license triage below; added 2026-07-29.
+
+## Dropped
+
+Two files were staged here at various points and dropped after checking their
+actual license terms:
 
 - `compute_MFCC.m` (Malcolm Slaney, Auditory Toolbox, 1993/1998 Interval
   Research Corporation): the file carries a copyright notice but no license
