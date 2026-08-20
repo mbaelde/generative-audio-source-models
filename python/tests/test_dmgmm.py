@@ -1,5 +1,6 @@
 import numpy as np
 
+from gasm.rase import dmgmm
 from gasm.rase.dmgmm import DMGMMSeparator
 
 
@@ -114,3 +115,35 @@ def test_score_samples_is_higher_for_typical_mixtures() -> None:
 
     scores = sep.score_samples(np.vstack([typical, atypical]))
     assert scores[0] > scores[1]
+
+
+def test_diagonal_shortcut_matches_the_dense_solve(monkeypatch) -> None:
+    """The diagonal path is a speedup and nothing else.
+
+    An ablation that has to run at high freqbin fits diagonal covariances and
+    hands them back widened into matrices, which _pair_terms and _regress then
+    recognize to avoid a Cholesky of a diagonal matrix. Forcing the dense path
+    back on through the recognizer is what makes this the same fitted model
+    compared against itself rather than two differently-fitted ones.
+    """
+    rng = np.random.default_rng(5)
+    freqbin = 4
+    source1 = np.concatenate(
+        [
+            _tight_source(mean=5.0 + 0.0j, freqbin=freqbin, n=150, scale=0.5, rng=rng),
+            _tight_source(mean=-5.0 + 0.0j, freqbin=freqbin, n=150, scale=0.5, rng=rng),
+        ]
+    )
+    source2 = _tight_source(mean=0.0 + 5.0j, freqbin=freqbin, n=300, scale=0.5, rng=rng)
+
+    sep = DMGMMSeparator(n_components=[2, 1]).fit([source1, source2], random_state=0)
+    for source in sep.sources_:
+        source.covariances = np.stack([np.diag(np.diag(cov)) for cov in source.covariances])
+
+    mixed = source1[:6] + source2[:6]
+    fast = sep.predict(mixed)
+    monkeypatch.setattr(dmgmm, "_diagonal_variances", lambda covariances: None)
+    dense = sep.predict(mixed)
+
+    for shortcut, reference in zip(fast, dense):
+        np.testing.assert_allclose(shortcut, reference, rtol=1e-9, atol=1e-9)

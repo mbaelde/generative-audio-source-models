@@ -113,6 +113,27 @@ def _combine(a: SourceGMM, b: SourceGMM) -> SourceGMM:
     return SourceGMM(weights, means, covariances)
 
 
+def _diagonal_variances(covariances: FloatArray) -> FloatArray | None:
+    """The variance vectors when every covariance is diagonal, else None.
+
+    A diagonal covariance is not an exotic case here, it is the only one that
+    fits at high freqbin: a full covariance per component needs more frames than
+    a track has once the stacked dimension passes a thousand, so a fit run at
+    that dimension is diagonal and hands its variances back widened into
+    matrices. Recognizing them turns the per-pair solve and the regression gain
+    from O(n_frames * dim^2) into O(n_frames * dim), three orders of magnitude
+    at freqbin = 513, and returns the same numbers: dividing by the variances is
+    what the Cholesky of a diagonal matrix does, with fewer roundings on the way.
+
+    A matrix is diagonal exactly when its nonzeros are its diagonal's, which
+    counts in place rather than building a (n_components, dim, dim) comparison.
+    """
+    for covariance in covariances:
+        if np.count_nonzero(covariance) != np.count_nonzero(np.diagonal(covariance)):
+            return None
+    return np.diagonal(covariances, axis1=-2, axis2=-1)
+
+
 def _pair_terms(
     source1: SourceGMM, source2: SourceGMM, x: FloatArray
 ) -> Iterator[tuple[int, FloatArray, FloatArray]]:
@@ -127,16 +148,31 @@ def _pair_terms(
     what makes this tractable: O(n1*n2*d^3) instead of O(n_frames*n1*n2*d^3).
     The single triangular solve serves both the Gaussian's quadratic form and
     the regression gain Sigma_1k1 @ inv(Sigma_sum), which are the same inverse.
+
+    When both sources are diagonal so is every Sigma_sum, and the factorization
+    and the solve collapse to a reciprocal (see _diagonal_variances). The test
+    runs once per call rather than once per pair, so it costs O(n1*d^2) against
+    the O(n1*n2*n_frames*d^2) it removes.
     """
     dim = x.shape[-1]
+    variances1 = _diagonal_variances(source1.covariances)
+    variances2 = _diagonal_variances(source2.covariances)
+    diagonal = variances1 is not None and variances2 is not None
     for k1, (weight1, mean1, cov1) in enumerate(
         zip(source1.weights, source1.means, source1.covariances)
     ):
-        for weight2, mean2, cov2 in zip(source2.weights, source2.means, source2.covariances):
-            chol = cho_factor(cov1 + cov2, lower=True)
+        for k2, (weight2, mean2, cov2) in enumerate(
+            zip(source2.weights, source2.means, source2.covariances)
+        ):
             delta = x - (mean1 + mean2)
-            solved = cho_solve(chol, delta.T).T
-            log_det = 2.0 * np.log(np.diag(chol[0])).sum()
+            if diagonal:
+                total = variances1[k1] + variances2[k2]
+                solved = delta / total
+                log_det = np.log(total).sum()
+            else:
+                chol = cho_factor(cov1 + cov2, lower=True)
+                solved = cho_solve(chol, delta.T).T
+                log_det = 2.0 * np.log(np.diag(chol[0])).sum()
             log_phi = np.log(weight1 * weight2) - 0.5 * (
                 np.einsum("td,td->t", delta, solved) + log_det + dim * _LOG_2PI
             )
@@ -163,8 +199,13 @@ def _regress(
         log_phi[i] = phi_row
     log_norm = logsumexp(log_phi, axis=0)
     estimate = np.zeros_like(x)
+    # the gain Sigma_1k1 @ inv(Sigma_sum) is the second O(n_frames * dim^2) term
+    # of the pair, and it collapses on its own terms: source2 may be dense here
+    # and the multiply still holds as long as source1 is diagonal
+    variances1 = _diagonal_variances(source1.covariances)
     for i, (k1, phi_row, solved) in enumerate(_pair_terms(source1, source2, x)):
-        mu_tilde = source1.means[k1] + solved @ source1.covariances[k1].T
+        gain = solved * variances1[k1] if variances1 is not None else solved @ source1.covariances[k1].T
+        mu_tilde = source1.means[k1] + gain
         estimate += np.exp(phi_row - log_norm)[:, None] * mu_tilde
         if verbose and (i + 1) % 10 == 0:
             print(f"DM-GMM regress: pair {i + 1}/{n_pairs}", flush=True)
